@@ -14,18 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuPortal,
 } from "@/components/ui/dropdown-menu";
-import {
-  PlusIcon,
-  UploadIcon,
-  FolderPlusIcon,
-  ChevronsUpDown,
-  LogIn,
-  LogOut,
-  User2,
-  Sun,
-  Moon,
-  Laptop,
-} from "lucide-react";
+import { LogIn, LogOut, User2, Sun, Moon, Laptop } from "lucide-react";
 import { authClient } from "@/lib/auth/client";
 import { useTheme } from "next-themes";
 import Link from "next/link";
