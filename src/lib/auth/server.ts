@@ -2,18 +2,11 @@ import { betterAuth } from "better-auth";
 import { emailOTP } from "better-auth/plugins";
 import { Pool } from "pg";
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false,
-  },
-});
-
 export const auth = betterAuth({
-  database: {
-    type: "postgres",
-    pool,
-  },
+  database: new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: false,
+  }),
   user: {
     deleteUser: {
       enabled: true,
