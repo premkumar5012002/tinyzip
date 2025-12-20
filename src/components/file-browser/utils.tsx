@@ -26,7 +26,7 @@ export const getFileIcon = (file: FileItem) => {
   if (file.isFolder) {
     return (
       <FolderIcon
-        className="size-4 opacity-60 fill-sky-200 text-sky-500"
+        className="size-4 opacity-60 fill-primary/20 text-primary"
         aria-hidden="true"
       />
     );

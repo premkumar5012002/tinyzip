@@ -12,8 +12,8 @@ import { s3Client } from "@/lib/s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
+import { sanitizeFilename } from "@/lib/utils";
 
-// Unified type for the frontend
 export type FileItem = {
   id: string;
   name: string;
@@ -30,7 +30,9 @@ export async function getFiles(folderId: string | null) {
     headers: await headers(),
   });
 
-  if (!session) return [];
+  if (!session) {
+    throw new Error("Unauthorized");
+  }
 
   const folders = await prisma.folder.findMany({
     where: {
@@ -178,16 +180,11 @@ export async function moveItems(ids: string[], targetParentId?: string) {
 
   const target = targetParentId || null;
 
-  // Try update files
   await prisma.file.updateMany({
     where: { id: { in: ids }, userId: session.user.id },
     data: { folderId: target },
   });
 
-  // Try update folders
-  // Need check for cycles if moving folder!
-  // Simple check: don't move if target seems to be child? Hard to check without recursion.
-  // Prisma doesn't check cycles.
   await prisma.folder.updateMany({
     where: { id: { in: ids }, userId: session.user.id },
     data: { parentId: target },
@@ -312,8 +309,7 @@ export async function getDownloadUrl(id: string) {
 export async function getUploadUrl(
   filename: string,
   contentType: string,
-  size: number,
-  folderId?: string | null
+  size: number
 ) {
   const session = await auth.api.getSession({
     headers: await headers(),
@@ -373,13 +369,11 @@ export async function completeUpload(
         Key: key,
       })
     );
-  } catch (error) {
+  } catch {
     throw new Error("File upload failed verification");
   }
 
-  const sanitizedName = filename
-    .replace(/\s+/g, "-")
-    .replace(/[^a-zA-Z0-9.-]/g, "");
+  const sanitizedName = sanitizeFilename(filename);
 
   const url = `${process.env.S3_ENDPOINT}/${process.env.S3_BUCKET}/${key}`;
 
@@ -404,16 +398,56 @@ export async function getStorageUsage() {
     headers: await headers(),
   });
 
-  if (!session) return { used: 0, total: 5 * 1024 * 1024 * 1024 };
+  if (!session) throw new Error("Unauthorized");
 
-  const currentUsage = await prisma.file.aggregate({
-    where: { userId: session.user.id },
+  const usageByType = await prisma.file.groupBy({
+    by: ["mimeType"],
     _sum: { size: true },
+    _count: { id: true },
+    where: { userId: session.user.id },
+  });
+
+  const image = { size: 0, count: 0 };
+  const video = { size: 0, count: 0 };
+  const document = { size: 0, count: 0 };
+  const other = { size: 0, count: 0 };
+  let totalUsed = 0;
+
+  usageByType.forEach((group) => {
+    const size = group._sum.size || 0;
+    const count = group._count.id || 0;
+    const type = group.mimeType || "";
+    totalUsed += size;
+
+    if (type.startsWith("image/")) {
+      image.size += size;
+      image.count += count;
+    } else if (type.startsWith("video/")) {
+      video.size += size;
+      video.count += count;
+    } else if (
+      type.includes("pdf") ||
+      type.includes("text") ||
+      type.includes("document") ||
+      type.includes("msword") ||
+      type.includes("sheet") ||
+      type.includes("presentation")
+    ) {
+      document.size += size;
+      document.count += count;
+    } else {
+      other.size += size;
+      other.count += count;
+    }
   });
 
   return {
-    used: currentUsage._sum.size || 0,
-    total: 5 * 1024 * 1024 * 1024, // 5GB Limit
+    used: totalUsed,
+    total: 800 * 1024 * 1024 * 1024, // 800 GB Limit (Mocked for UI match)
+    image,
+    video,
+    document,
+    other,
   };
 }
 
@@ -422,7 +456,7 @@ export async function searchFiles(query: string) {
     headers: await headers(),
   });
 
-  if (!session) return [];
+  if (!session) throw new Error("Unauthorized");
 
   const folders = await prisma.folder.findMany({
     where: {

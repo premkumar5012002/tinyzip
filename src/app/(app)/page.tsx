@@ -1,5 +1,4 @@
 import { auth } from "@/lib/auth/server";
-import prisma from "@/lib/prisma";
 import { getAllFilesAndFolders } from "@/lib/file-data";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";

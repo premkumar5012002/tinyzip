@@ -25,7 +25,7 @@ export function FileGrid({
         return (
           <div
             key={item.id}
-            className={`group relative border rounded-xl overflow-hidden hover:shadow-md transition-all cursor-pointer ${
+            className={`group relative border border-muted-foreground/20 rounded-xl overflow-hidden hover:shadow-md transition-all cursor-pointer ${
               isSelected ? "ring-2 ring-primary border-primary" : ""
             }`}
             onClick={(e) => {

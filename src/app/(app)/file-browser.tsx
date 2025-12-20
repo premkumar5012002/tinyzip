@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { UploadCloudIcon, UploadIcon } from "lucide-react";
+import { UploadCloudIcon } from "lucide-react";
 import { toast } from "sonner";
-import { useFileUpload, FileWithPreview } from "@/hooks/use-file-upload";
+import { useFileUpload } from "@/hooks/use-file-upload";
 import { useRouter } from "next/navigation";
+import { useUploadProgress } from "@/context/upload-progress-context";
 
 import {
   Dialog,
@@ -23,10 +24,10 @@ import {
   createFolder,
   moveItems,
   copyItems,
-  getUploadUrl,
-  completeUpload,
   FileItem as ServerFileItem,
 } from "@/actions/files";
+
+import { sanitizeFilename } from "@/lib/utils";
 
 import { FileItem } from "@/components/file-browser/types";
 import { getExt } from "@/components/file-browser/utils";
@@ -121,6 +122,75 @@ const FileBrowser = React.forwardRef<FileBrowserRef, FileBrowserProps>(
     const [moveTargetId, setMoveTargetId] = React.useState<string | null>(null);
     const [isCopyOpen, setIsCopyOpen] = React.useState(false);
 
+    // Sync initialFiles to allFiles
+    React.useEffect(() => {
+      setAllFiles(
+        initialFiles.map((f) => ({
+          ...f,
+          status: "done",
+        }))
+      );
+    }, [initialFiles]);
+
+    // Upload Context
+    const { startUpload, uploads } = useUploadProgress();
+    const routerRef = React.useRef(router);
+    React.useEffect(() => {
+      routerRef.current = router;
+    }, [router]);
+
+    // Watch for completed uploads to trigger refresh
+    React.useEffect(() => {
+      const hasCompletedInThisFolder = Array.from(uploads.values()).some(
+        (u) =>
+          u.folderId === currentFolderId &&
+          u.status === "done" &&
+          !allFiles.some(
+            (f) =>
+              f.name === sanitizeFilename(u.file.name) && f.size === u.file.size
+          ) // Simple dedup check
+      );
+
+      if (hasCompletedInThisFolder) {
+        // Debounce or just call? SWR/Next usually handles deduping refreshes well.
+        routerRef.current.refresh();
+      }
+    }, [uploads, currentFolderId, allFiles]);
+
+    // Active uploads in current folder (including recently done ones not yet in server list)
+    const activeUploads = React.useMemo(() => {
+      return Array.from(uploads.values())
+        .filter((u) => {
+          if (u.folderId !== currentFolderId) return false;
+          if (u.status === "uploading") return true;
+          if (u.status === "done") {
+            // Keep showing 'done' files until they appear in initialFiles/allFiles
+            const alreadyExists = allFiles.some(
+              (f) =>
+                f.name === sanitizeFilename(u.file.name) &&
+                f.size === u.file.size
+            );
+            return !alreadyExists;
+          }
+          return false;
+        })
+        .map(
+          (u) =>
+            ({
+              id: u.id,
+              name: u.file.name,
+              size: u.file.size,
+              type: u.file.type || "",
+              status: u.status === "uploading" ? "uploading" : "done",
+              progress: u.progress,
+              isFolder: false,
+              parentId: currentFolderId,
+              createdAt: new Date(),
+              mimeType: u.file.type || null,
+            } as FileItem)
+        );
+    }, [uploads, currentFolderId, allFiles]);
+
     // useFileUpload
     const [
       { isDragging },
@@ -136,7 +206,13 @@ const FileBrowser = React.forwardRef<FileBrowserRef, FileBrowserProps>(
       maxFiles,
       maxSize,
       onFilesAdded: async (addedFiles) => {
-        await handleUpload(addedFiles);
+        const filesToUpload = addedFiles
+          .map((af) => (af.file instanceof File ? af.file : null))
+          .filter(Boolean) as File[];
+
+        if (filesToUpload.length > 0) {
+          await startUpload(filesToUpload, currentFolderId);
+        }
       },
     });
 
@@ -161,119 +237,7 @@ const FileBrowser = React.forwardRef<FileBrowserRef, FileBrowserProps>(
       return path;
     }, [currentFolderId, allFiles]);
 
-    const handleUpload = async (addedFiles: FileWithPreview[]) => {
-      // 1. Add optimistic items
-      const newItems: FileItem[] = addedFiles.map((af) => ({
-        id: af.id,
-        name: af.file instanceof File ? af.file.name : af.file.name,
-        size: af.file instanceof File ? af.file.size : af.file.size,
-        type: af.file instanceof File ? af.file.type : af.file.type,
-        fileObject: af.file instanceof File ? af.file : undefined,
-        preview: af.preview,
-        status: "uploading",
-        progress: 0,
-        isFolder: false,
-        parentId: currentFolderId,
-        mimeType: af.file instanceof File ? af.file.type : af.file.type,
-        createdAt: new Date(),
-      }));
-
-      setAllFiles((prev) => [...prev, ...newItems]);
-
-      // 2. Upload
-      const uploadPromises = newItems.map(async (item) => {
-        if (!item.fileObject) return;
-
-        try {
-          const { url, key } = await getUploadUrl(
-            item.name,
-            item.mimeType || "application/octet-stream",
-            item.size,
-            currentFolderId
-          );
-
-          await new Promise<void>((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            xhr.open("PUT", url);
-            if (item.mimeType) {
-              xhr.setRequestHeader("Content-Type", item.mimeType);
-            }
-
-            xhr.upload.onprogress = (event) => {
-              if (event.lengthComputable) {
-                const percentComplete = (event.loaded / event.total) * 100;
-                setAllFiles((prev) =>
-                  prev.map((f) =>
-                    f.id === item.id ? { ...f, progress: percentComplete } : f
-                  )
-                );
-              }
-            };
-
-            xhr.onload = async () => {
-              if (xhr.status === 200) {
-                try {
-                  await completeUpload(
-                    key,
-                    item.name,
-                    item.size,
-                    item.mimeType || "application/octet-stream",
-                    currentFolderId
-                  );
-                  setAllFiles((prev) =>
-                    prev.map((f) =>
-                      f.id === item.id
-                        ? { ...f, status: "done", progress: 100 }
-                        : f
-                    )
-                  );
-                  toast.success(`Uploaded ${item.name}`);
-                  resolve();
-                } catch (err) {
-                  console.error("Complete upload error", err);
-                  setAllFiles((prev) =>
-                    prev.map((f) =>
-                      f.id === item.id ? { ...f, status: "error" } : f
-                    )
-                  );
-                  toast.error(`Failed to complete upload for ${item.name}`);
-                  reject(err);
-                }
-              } else {
-                setAllFiles((prev) =>
-                  prev.map((f) =>
-                    f.id === item.id ? { ...f, status: "error" } : f
-                  )
-                );
-                toast.error(`Failed to upload ${item.name}`);
-                reject(new Error("S3 Upload Failed"));
-              }
-            };
-
-            xhr.onerror = () => {
-              setAllFiles((prev) =>
-                prev.map((f) =>
-                  f.id === item.id ? { ...f, status: "error" } : f
-                )
-              );
-              toast.error(`Failed to upload ${item.name}`);
-              reject(new Error("Network Error"));
-            };
-
-            xhr.send(item.fileObject);
-          });
-        } catch (e) {
-          console.error("Get upload url error", e);
-          setAllFiles((prev) =>
-            prev.map((f) => (f.id === item.id ? { ...f, status: "error" } : f))
-          );
-          toast.error(`Failed to start upload for ${item.name}`);
-        }
-      });
-
-      await Promise.allSettled(uploadPromises);
-      window.location.reload();
-    };
+    // Old handleUpload removed
 
     const createNewFolder = async () => {
       if (!newFolderName.trim()) return;
@@ -294,8 +258,8 @@ const FileBrowser = React.forwardRef<FileBrowserRef, FileBrowserProps>(
         setNewFolderName("");
 
         await createFolder(newFolderName, currentFolderId || undefined);
+
         toast.success("Folder created");
-        window.location.reload();
       } catch {
         toast.error("Failed to create folder");
       }
@@ -308,7 +272,6 @@ const FileBrowser = React.forwardRef<FileBrowserRef, FileBrowserProps>(
         toast.success("Files moved");
         setIsMoveOpen(false);
         setSelected(new Set());
-        window.location.reload();
       } catch (e) {
         toast.error((e as Error).message);
       }
@@ -321,15 +284,19 @@ const FileBrowser = React.forwardRef<FileBrowserRef, FileBrowserProps>(
         toast.success("Files copied");
         setIsCopyOpen(false);
         setSelected(new Set());
-        window.location.reload();
       } catch (e) {
         toast.error((e as Error).message);
       }
     };
 
     // Filter Logic
+    const displayFiles = React.useMemo(
+      () => [...allFiles, ...activeUploads],
+      [allFiles, activeUploads]
+    );
+
     const filtered = React.useMemo(() => {
-      let scope = allFiles.filter((f) => f.parentId === currentFolderId);
+      let scope = displayFiles.filter((f) => f.parentId === currentFolderId);
       const q = query.trim().toLowerCase();
 
       if (q) {
@@ -448,13 +415,10 @@ const FileBrowser = React.forwardRef<FileBrowserRef, FileBrowserProps>(
       <div className="flex flex-col gap-4 max-w-6xl mx-auto">
         {!isSearchResults && (
           <>
-            <FileBreadcrumbs
-              breadcrumbs={breadcrumbs}
-              setCurrentFolderId={setCurrentFolderId}
-            />
-
+            <div className="flex flex-col gap-4">
+              <FileBreadcrumbs breadcrumbs={breadcrumbs} />
+            </div>
             <FileToolbar
-              currentFolderId={currentFolderId}
               goUp={goUp}
               sortBy={sortBy}
               setSortBy={setSortBy}

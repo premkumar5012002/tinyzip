@@ -1,4 +1,4 @@
-import { ArrowUpRightIcon, FileIcon } from "lucide-react";
+import { FileIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {

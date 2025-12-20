@@ -26,7 +26,7 @@ export function UsageBar() {
   if (loading) return null;
 
   return (
-    <div className="flex flex-col gap-2 p-2">
+    <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <CloudIcon className="size-4" />
         <span>Storage</span>

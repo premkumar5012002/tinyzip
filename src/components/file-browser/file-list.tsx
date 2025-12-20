@@ -8,8 +8,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
+import { Checkbox } from "@/components/ui/checkbox";
 import { FileItem } from "./types";
-import { getFileIcon, niceSubtype } from "./utils";
+import { getFileIcon } from "./utils";
 import { formatBytes } from "@/lib/format";
 import { FileActionsMenu } from "./file-actions-menu";
 
@@ -41,22 +42,24 @@ export function FileList({
   onDelete,
 }: FileListProps) {
   return (
-    <div className="rounded-md border">
+    <div className="rounded-md border border-muted-foreground/20">
       <Table>
         <TableHeader>
-          <TableRow>
-            <TableHead className="w-10">
-              <input
-                type="checkbox"
-                checked={allSelected}
-                onChange={toggleAll}
-                className="size-4 accent-foreground"
-              />
+          <TableRow className="border-b border-muted-foreground/20 hover:bg-transparent">
+            <TableHead className="w-10 pl-4">
+              <Checkbox checked={allSelected} onCheckedChange={toggleAll} />
             </TableHead>
-            <TableHead>Name</TableHead>
-            <TableHead>Type</TableHead>
-            <TableHead>Size</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
+            <TableHead className="text-muted-foreground font-medium">
+              File Name
+            </TableHead>
+
+            <TableHead className="text-muted-foreground font-medium">
+              Size
+            </TableHead>
+            <TableHead className="text-muted-foreground font-medium">
+              Upload Date
+            </TableHead>
+            <TableHead className="text-right text-muted-foreground font-medium"></TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -67,31 +70,39 @@ export function FileList({
                 key={item.id}
                 data-selected={isSelected}
                 onDoubleClick={() => openItem(item)}
-                className="cursor-pointer"
+                className="cursor-pointer border-b border-muted-foreground/20 hover:bg-accent/50 data-[selected=true]:bg-accent"
               >
-                <TableCell onClick={(e) => e.stopPropagation()}>
-                  <input
-                    type="checkbox"
+                <TableCell
+                  className="pl-4"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Checkbox
                     checked={isSelected}
-                    onChange={(e) => toggleOne(item.id, e)}
-                    className="size-4 accent-foreground"
+                    onCheckedChange={() =>
+                      toggleOne(item.id, {
+                        stopPropagation: () => {},
+                      } as unknown as React.SyntheticEvent)
+                    }
                   />
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-3">
-                    <div className="size-8 rounded bg-muted/50 flex items-center justify-center shrink-0">
+                    <div className="size-8 rounded bg-muted flex items-center justify-center shrink-0 text-primary">
                       {getFileIcon(item)}
                     </div>
-                    <span className="font-medium truncate max-w-[200px] sm:max-w-md">
+                    <span className="font-medium truncate max-w-[150px] sm:max-w-xs text-foreground">
                       {item.name}
                     </span>
                   </div>
                 </TableCell>
-                <TableCell className="text-muted-foreground text-xs uppercase">
-                  {niceSubtype(item.mimeType, item.isFolder)}
-                </TableCell>
-                <TableCell className="text-muted-foreground">
+
+                <TableCell className="text-muted-foreground text-sm">
                   {item.isFolder ? "-" : formatBytes(item.size)}
+                </TableCell>
+                <TableCell className="text-muted-foreground text-sm">
+                  {item.createdAt
+                    ? new Date(item.createdAt).toLocaleDateString()
+                    : "-"}
                 </TableCell>
                 <TableCell
                   className="text-right"
@@ -99,7 +110,10 @@ export function FileList({
                 >
                   {item.status === "uploading" ? (
                     <div className="w-[100px] ml-auto">
-                      <Progress value={item.progress} className="h-2" />
+                      <Progress
+                        value={item.progress}
+                        className="h-1 bg-muted"
+                      />
                     </div>
                   ) : (
                     <FileActionsMenu

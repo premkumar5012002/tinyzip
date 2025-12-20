@@ -2,7 +2,6 @@
 
 import { auth } from "@/lib/auth/server";
 import { s3Client } from "@/lib/s3";
-import prisma from "@/lib/prisma";
 import { headers } from "next/headers";
 import {
   DeleteObjectsCommand,

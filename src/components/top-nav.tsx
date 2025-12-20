@@ -1,7 +1,6 @@
 "use client";
 
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -18,21 +17,24 @@ import { LogIn, LogOut, User2, Sun, Moon, Laptop } from "lucide-react";
 import { authClient } from "@/lib/auth/client";
 import { useTheme } from "next-themes";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
+import { CommandSearch } from "@/components/command-search";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useEffect, useState } from "react";
 
-interface TopNavProps {
-  openFileDialog?: () => void;
-  setIsNewFolderOpen?: (open: boolean) => void;
-}
-
-export function TopNav({ openFileDialog, setIsNewFolderOpen }: TopNavProps) {
+export function TopNav() {
   const router = useRouter();
   const { data: session, isPending } = authClient.useSession();
-  const { setTheme, theme } = useTheme();
+  const { setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMounted(true);
+  }, []);
 
   return (
-    <div className="sticky top-0 z-10 w-full border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
+    <div className="sticky top-0 z-10 w-full border-b border-muted-foreground/20 backdrop-blur supports-backdrop-filter:bg-background/60">
       <div className="flex h-14 items-center px-4 gap-4">
         {/* Left: Sidebar Toggle */}
         <div className="flex items-center">
@@ -41,28 +43,13 @@ export function TopNav({ openFileDialog, setIsNewFolderOpen }: TopNavProps) {
 
         {/* Center: Search Bar */}
         <div className="flex-1 flex justify-center">
-          <Input
-            type="text"
-            placeholder="Search files and folders..."
-            className="max-w-md"
-            defaultValue={useSearchParams().get("q") || ""}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                const value = (e.target as HTMLInputElement).value;
-                if (value.trim()) {
-                  router.push(`/search?q=${encodeURIComponent(value)}`);
-                } else {
-                  router.push("/");
-                }
-              }
-            }}
-          />
+          <CommandSearch />
         </div>
 
         {/* Right: New Button and Account Dropdown */}
         <div className="flex items-center gap-2">
           {/* Account Dropdown */}
-          {isPending ? (
+          {!mounted || isPending ? (
             <Skeleton className="h-9 w-9 rounded-full" />
           ) : session ? (
             <DropdownMenu>

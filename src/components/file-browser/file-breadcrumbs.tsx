@@ -5,10 +5,9 @@ import {
   BreadcrumbList,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { ArrowLeft, ChevronLeft, Folder } from "lucide-react";
+import { Folder } from "lucide-react";
 import Link from "next/link";
 import React from "react";
-import { Button } from "../ui/button";
 
 interface BreadcrumbItem {
   id: string;
@@ -17,21 +16,9 @@ interface BreadcrumbItem {
 
 interface FileBreadcrumbsProps {
   breadcrumbs: BreadcrumbItem[];
-  setCurrentFolderId: (id: string | null) => void;
 }
 
-export function FileBreadcrumbs({
-  breadcrumbs,
-  setCurrentFolderId,
-}: FileBreadcrumbsProps) {
-  const handleBackClick = () => {
-    if (breadcrumbs.length <= 1) {
-      setCurrentFolderId(null); // Go to Home
-    } else {
-      setCurrentFolderId(breadcrumbs[breadcrumbs.length - 2].id); // Go to parent folder
-    }
-  };
-
+export function FileBreadcrumbs({ breadcrumbs }: FileBreadcrumbsProps) {
   return (
     <Breadcrumb>
       <BreadcrumbList>
@@ -44,7 +31,7 @@ export function FileBreadcrumbs({
           </BreadcrumbLink>
         </BreadcrumbItem>
 
-        {breadcrumbs.map((b, index) => (
+        {breadcrumbs.map((b) => (
           <React.Fragment key={b.id}>
             <BreadcrumbSeparator />
             <BreadcrumbItem>
